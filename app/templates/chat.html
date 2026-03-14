@@ -32,13 +32,12 @@
             gap: 12px;
             align-items: center;
         }
-        .toolbar select, .toolbar input {
+        .toolbar input {
             padding: 8px 12px;
             border: 1px solid #d1d5db;
             border-radius: 6px;
             font-size: 14px;
         }
-        .toolbar select { min-width: 200px; }
         .toolbar button {
             padding: 8px 16px;
             background: #e2e8f0;
@@ -48,6 +47,7 @@
             font-size: 13px;
         }
         .toolbar button:hover { background: #cbd5e1; }
+        .toolbar .label { font-size: 13px; color: #6b7280; }
         .chat-container {
             flex: 1;
             overflow-y: auto;
@@ -127,7 +127,6 @@
             margin-top: 100px;
             font-size: 16px;
         }
-        .loading { opacity: 0.6; }
     </style>
 </head>
 <body>
@@ -137,16 +136,14 @@
     </header>
 
     <div class="toolbar">
-        <select id="dataset-select">
-            <option value="">Select a dataset...</option>
-        </select>
+        <span class="label">Locale:</span>
         <input type="text" id="locale-input" value="es" placeholder="Locale" style="width:60px;">
         <button onclick="newConversation()">New conversation</button>
     </div>
 
     <div class="chat-container" id="chat">
         <div class="empty-state" id="empty-state">
-            Select a dataset and ask a question about your data.
+            Ask a question about any of your uploaded datasets.
         </div>
     </div>
 
@@ -158,28 +155,13 @@
     </div>
 
     <script>
-        const datasetSelect = document.getElementById('dataset-select');
         const questionInput = document.getElementById('question-input');
         const chatContainer = document.getElementById('chat');
         const emptyState = document.getElementById('empty-state');
         const sendBtn = document.getElementById('send-btn');
         const localeInput = document.getElementById('locale-input');
 
-        async function loadDatasets() {
-            try {
-                const resp = await fetch('/datasets');
-                const data = await resp.json();
-                datasetSelect.innerHTML = '<option value="">Select a dataset...</option>';
-                data.datasets.forEach(ds => {
-                    const opt = document.createElement('option');
-                    opt.value = ds.id;
-                    opt.textContent = `${ds.name} (${ds.row_count} rows)`;
-                    datasetSelect.appendChild(opt);
-                });
-            } catch (e) {
-                console.error('Failed to load datasets:', e);
-            }
-        }
+        let conversationId = localStorage.getItem('data-rag-conversation-id') || null;
 
         function addMessage(role, content) {
             emptyState.style.display = 'none';
@@ -193,23 +175,26 @@
         async function sendQuestion(e) {
             e.preventDefault();
             const question = questionInput.value.trim();
-            const datasetId = datasetSelect.value;
-
-            if (!question || !datasetId) return;
+            if (!question) return;
 
             addMessage('user', escapeHtml(question));
             questionInput.value = '';
             sendBtn.disabled = true;
 
             try {
-                const resp = await fetch(`/datasets/${datasetId}/query`, {
+                const body = {
+                    question,
+                    locale: localeInput.value || 'en',
+                    include_sql: true
+                };
+                if (conversationId) {
+                    body.conversation_id = conversationId;
+                }
+
+                const resp = await fetch('/chat', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        question,
-                        locale: localeInput.value || 'en',
-                        include_sql: true
-                    })
+                    body: JSON.stringify(body)
                 });
 
                 if (!resp.ok) {
@@ -219,6 +204,11 @@
                 }
 
                 const data = await resp.json();
+
+                // Save conversation ID for continuity
+                conversationId = data.conversation_id;
+                localStorage.setItem('data-rag-conversation-id', conversationId);
+
                 let html = `<div class="answer">${escapeHtml(data.answer)}</div>`;
                 if (data.sql) {
                     html += `<details><summary>View SQL</summary><pre>${escapeHtml(data.sql)}</pre></details>`;
@@ -236,6 +226,8 @@
         }
 
         function newConversation() {
+            conversationId = null;
+            localStorage.removeItem('data-rag-conversation-id');
             chatContainer.innerHTML = '';
             emptyState.style.display = 'block';
             chatContainer.appendChild(emptyState);
@@ -246,8 +238,6 @@
             div.textContent = text;
             return div.innerHTML;
         }
-
-        loadDatasets();
     </script>
 </body>
 </html>
