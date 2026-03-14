@@ -75,18 +75,14 @@ class MetadataStore:
 
     async def get_by_id(self, dataset_id: str) -> DatasetRecord | None:
         """Retrieve a single dataset by ID. Returns None if not found."""
-        rows = await self._db.execute(
-            "SELECT * FROM dataset_metadata WHERE id = ?", [dataset_id]
-        )
+        rows = await self._db.execute("SELECT * FROM dataset_metadata WHERE id = ?", [dataset_id])
         if not rows:
             return None
         return self._row_to_record(rows[0])
 
     async def list_all(self) -> list[DatasetRecord]:
         """Retrieve all datasets, ordered by creation date descending."""
-        rows = await self._db.execute(
-            "SELECT * FROM dataset_metadata ORDER BY created_at DESC"
-        )
+        rows = await self._db.execute("SELECT * FROM dataset_metadata ORDER BY created_at DESC")
         return [self._row_to_record(row) for row in rows]
 
     async def delete_by_id(self, dataset_id: str) -> bool:

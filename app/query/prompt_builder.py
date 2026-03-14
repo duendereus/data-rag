@@ -39,9 +39,7 @@ def _format_sample(sample_json: str) -> str:
     return "\n".join(lines)
 
 
-def build_sql_prompt(
-    dataset: DatasetRecord, question: str, row_limit: int
-) -> tuple[str, str]:
+def build_sql_prompt(dataset: DatasetRecord, question: str, row_limit: int) -> tuple[str, str]:
     """Build the system + user prompts for SQL generation.
 
     Returns (system_prompt, user_message).

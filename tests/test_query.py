@@ -125,9 +125,7 @@ class TestQueryService:
         service = QueryService(db=db, repository=repo, llm_client=mock_llm)
 
         with pytest.raises(DatasetNotFoundError):
-            await service.run_query(
-                "ds_nonexistent", QueryRequest(question="test")
-            )
+            await service.run_query("ds_nonexistent", QueryRequest(question="test"))
 
 
 class TestQueryEndpoint:

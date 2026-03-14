@@ -2,8 +2,11 @@
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 
 from app.core.logging import setup_logging
 from app.core.middleware import RequestIDMiddleware, register_exception_handlers
@@ -53,7 +56,22 @@ app.include_router(datasets_router)
 app.include_router(query_router)
 
 
+templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     """Health check endpoint."""
     return {"status": "ok"}
+
+
+@app.get("/", response_class=HTMLResponse)
+async def chat_page(request: Request) -> HTMLResponse:
+    """Serve the chat interface."""
+    return templates.TemplateResponse("chat.html", {"request": request})
+
+
+@app.get("/panel", response_class=HTMLResponse)
+async def admin_panel(request: Request) -> HTMLResponse:
+    """Serve the admin panel."""
+    return templates.TemplateResponse("admin.html", {"request": request})

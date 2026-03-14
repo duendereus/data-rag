@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>data-rag | Admin Panel</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+        }
+        header {
+            background: #1a1a2e;
+            color: #fff;
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        header h1 { font-size: 18px; font-weight: 600; }
+        header a { color: #94a3b8; text-decoration: none; font-size: 14px; }
+        header a:hover { color: #fff; }
+        .container { max-width: 960px; margin: 24px auto; padding: 0 24px; }
+
+        /* Upload area */
+        .upload-card {
+            background: #fff;
+            border: 2px dashed #d1d5db;
+            border-radius: 12px;
+            padding: 32px;
+            text-align: center;
+            margin-bottom: 24px;
+            transition: border-color 0.2s;
+        }
+        .upload-card.dragover { border-color: #6366f1; background: #f5f3ff; }
+        .upload-card h2 { font-size: 16px; margin-bottom: 8px; color: #374151; }
+        .upload-card p { font-size: 13px; color: #6b7280; margin-bottom: 16px; }
+        .upload-card input[type="file"] { display: none; }
+        .upload-card label {
+            display: inline-block;
+            padding: 10px 24px;
+            background: #6366f1;
+            color: #fff;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .upload-card label:hover { background: #4f46e5; }
+        .upload-fields {
+            display: none;
+            margin-top: 16px;
+            text-align: left;
+        }
+        .upload-fields.visible { display: block; }
+        .upload-fields input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+        .upload-fields .file-info {
+            font-size: 13px;
+            color: #6b7280;
+            margin-bottom: 8px;
+        }
+        .upload-fields button {
+            padding: 10px 24px;
+            background: #6366f1;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .upload-fields button:hover { background: #4f46e5; }
+        .upload-fields button:disabled { background: #94a3b8; cursor: not-allowed; }
+
+        /* Dataset list */
+        .dataset-card {
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+        .dataset-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .dataset-header h3 { font-size: 15px; color: #1f2937; }
+        .dataset-header .meta { font-size: 12px; color: #6b7280; }
+        .dataset-header button {
+            padding: 4px 12px;
+            background: #fee2e2;
+            color: #dc2626;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .dataset-header button:hover { background: #fecaca; }
+        .schema-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            margin-top: 8px;
+        }
+        .schema-table th {
+            text-align: left;
+            padding: 6px 8px;
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            color: #6b7280;
+            font-weight: 500;
+        }
+        .schema-table td {
+            padding: 6px 8px;
+            border-bottom: 1px solid #f1f5f9;
+        }
+        .schema-toggle {
+            font-size: 13px;
+            color: #6366f1;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 4px 0;
+        }
+        .empty-state { text-align: center; color: #94a3b8; padding: 48px; }
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            padding: 12px 20px;
+            background: #1f2937;
+            color: #fff;
+            border-radius: 8px;
+            font-size: 14px;
+            display: none;
+            z-index: 100;
+        }
+        .toast.error { background: #dc2626; }
+        .toast.visible { display: block; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>data-rag | Admin</h1>
+        <a href="/">Back to Chat</a>
+    </header>
+
+    <div class="container">
+        <!-- Upload area -->
+        <div class="upload-card" id="upload-area">
+            <h2>Upload a Dataset</h2>
+            <p>Drag & drop a CSV or Excel file, or click to browse</p>
+            <label for="file-input">Choose file</label>
+            <input type="file" id="file-input" accept=".csv,.tsv,.xlsx,.xls">
+
+            <div class="upload-fields" id="upload-fields">
+                <div class="file-info" id="file-info"></div>
+                <input type="text" id="ds-name" placeholder="Dataset name (optional)">
+                <input type="text" id="ds-description" placeholder="Description (optional)">
+                <button onclick="uploadFile()" id="upload-btn">Upload</button>
+            </div>
+        </div>
+
+        <!-- Dataset list -->
+        <div id="datasets-list"></div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const uploadArea = document.getElementById('upload-area');
+        const fileInput = document.getElementById('file-input');
+        const uploadFields = document.getElementById('upload-fields');
+        const fileInfo = document.getElementById('file-info');
+        const datasetsList = document.getElementById('datasets-list');
+        const toast = document.getElementById('toast');
+
+        let selectedFile = null;
+
+        // Drag and drop
+        uploadArea.addEventListener('dragover', e => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+        uploadArea.addEventListener('drop', e => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            if (e.dataTransfer.files.length) selectFile(e.dataTransfer.files[0]);
+        });
+
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length) selectFile(fileInput.files[0]);
+        });
+
+        function selectFile(file) {
+            selectedFile = file;
+            fileInfo.textContent = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+            uploadFields.classList.add('visible');
+        }
+
+        async function uploadFile() {
+            if (!selectedFile) return;
+            const btn = document.getElementById('upload-btn');
+            btn.disabled = true;
+            btn.textContent = 'Uploading...';
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            const name = document.getElementById('ds-name').value;
+            const desc = document.getElementById('ds-description').value;
+            if (name) formData.append('name', name);
+            if (desc) formData.append('description', desc);
+
+            try {
+                const resp = await fetch('/datasets', { method: 'POST', body: formData });
+                if (!resp.ok) {
+                    const err = await resp.json();
+                    showToast(err.message || 'Upload failed', true);
+                    return;
+                }
+                showToast('Dataset uploaded successfully');
+                selectedFile = null;
+                uploadFields.classList.remove('visible');
+                fileInput.value = '';
+                document.getElementById('ds-name').value = '';
+                document.getElementById('ds-description').value = '';
+                loadDatasets();
+            } catch (e) {
+                showToast('Upload failed: connection error', true);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Upload';
+            }
+        }
+
+        async function loadDatasets() {
+            try {
+                const resp = await fetch('/datasets');
+                const data = await resp.json();
+                if (!data.datasets.length) {
+                    datasetsList.innerHTML = '<div class="empty-state">No datasets uploaded yet.</div>';
+                    return;
+                }
+                datasetsList.innerHTML = data.datasets.map(ds => renderDataset(ds)).join('');
+            } catch (e) {
+                datasetsList.innerHTML = '<div class="empty-state">Failed to load datasets.</div>';
+            }
+        }
+
+        function renderDataset(ds) {
+            const date = new Date(ds.created_at).toLocaleString();
+            const size = ds.file_size_bytes ? `${(ds.file_size_bytes / 1024).toFixed(1)} KB` : '';
+            const schemaRows = ds.schema_info.map(col =>
+                `<tr><td>${esc(col.column)}</td><td>${esc(col.type)}</td><td>${esc((col.sample || []).slice(0, 3).join(', '))}</td></tr>`
+            ).join('');
+
+            return `
+                <div class="dataset-card">
+                    <div class="dataset-header">
+                        <div>
+                            <h3>${esc(ds.name)}</h3>
+                            <div class="meta">${ds.row_count} rows | ${size} | ${date}</div>
+                            ${ds.description ? `<div class="meta">${esc(ds.description)}</div>` : ''}
+                        </div>
+                        <button onclick="deleteDataset('${ds.id}')">Delete</button>
+                    </div>
+                    <button class="schema-toggle" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'table' : 'none'">
+                        Show schema
+                    </button>
+                    <table class="schema-table" style="display:none">
+                        <thead><tr><th>Column</th><th>Type</th><th>Sample</th></tr></thead>
+                        <tbody>${schemaRows}</tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        async function deleteDataset(id) {
+            if (!confirm('Are you sure you want to delete this dataset?')) return;
+            try {
+                const resp = await fetch(`/datasets/${id}`, { method: 'DELETE' });
+                if (resp.ok) {
+                    showToast('Dataset deleted');
+                    loadDatasets();
+                } else {
+                    showToast('Delete failed', true);
+                }
+            } catch (e) {
+                showToast('Delete failed: connection error', true);
+            }
+        }
+
+        function showToast(msg, isError = false) {
+            toast.textContent = msg;
+            toast.className = `toast visible ${isError ? 'error' : ''}`;
+            setTimeout(() => toast.className = 'toast', 3000);
+        }
+
+        function esc(text) {
+            const div = document.createElement('div');
+            div.textContent = String(text);
+            return div.innerHTML;
+        }
+
+        loadDatasets();
+    </script>
+</body>
+</html>

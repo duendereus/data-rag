@@ -43,9 +43,7 @@ class QueryService:
         self._llm = llm_client
         self._row_limit = row_limit
 
-    async def run_query(
-        self, dataset_id: str, request: QueryRequest
-    ) -> QueryResponse:
+    async def run_query(self, dataset_id: str, request: QueryRequest) -> QueryResponse:
         """Execute the full query pipeline for a dataset."""
         # Load dataset metadata
         record = await self._repo.get_by_id(dataset_id)
@@ -53,9 +51,7 @@ class QueryService:
             raise DatasetNotFoundError(dataset_id)
 
         # Step 1: Generate SQL via LLM
-        sql_system, sql_user = build_sql_prompt(
-            record, request.question, self._row_limit
-        )
+        sql_system, sql_user = build_sql_prompt(record, request.question, self._row_limit)
         raw_sql = await self._llm.complete(sql_system, sql_user)
         sql = _clean_sql(raw_sql)
 

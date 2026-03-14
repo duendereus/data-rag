@@ -96,9 +96,7 @@ class DatasetService:
             col_name = col["column_name"]
             col_type = col["column_type"]
             samples = [row.get(col_name) for row in sample_rows if row.get(col_name) is not None]
-            schema_columns.append(
-                SchemaColumn(column=col_name, type=col_type, sample=samples[:5])
-            )
+            schema_columns.append(SchemaColumn(column=col_name, type=col_type, sample=samples[:5]))
 
         record = DatasetRecord(
             id=dataset_id,
@@ -186,9 +184,7 @@ class DatasetService:
     @staticmethod
     def _record_to_response(record: DatasetRecord) -> DatasetResponse:
         """Convert a DatasetRecord to a DatasetResponse."""
-        schema_columns = [
-            SchemaColumn(**col) for col in json.loads(record.schema_json)
-        ]
+        schema_columns = [SchemaColumn(**col) for col in json.loads(record.schema_json)]
         return DatasetResponse(
             id=record.id,
             name=record.name,
