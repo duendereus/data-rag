@@ -7,7 +7,12 @@ from fastapi import FastAPI
 
 from app.core.logging import setup_logging
 from app.core.middleware import RequestIDMiddleware, register_exception_handlers
+from app.datasets.router import router as datasets_router
+from app.db.duckdb import DuckDBManager
+from app.db.metadata import MetadataStore
 from app.dependencies import get_settings
+from app.llm.factory import create_llm_client
+from app.query.router import router as query_router
 
 
 @asynccontextmanager
@@ -16,7 +21,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings = get_settings()
     setup_logging(settings.LOG_LEVEL)
 
+    # Initialize DuckDB
+    db = DuckDBManager()
+    await db.startup(settings.DUCKDB_PATH)
+    app.state.db = db
+
+    # Initialize metadata store
+    metadata_store = MetadataStore(db)
+    await metadata_store.create_table()
+    app.state.metadata_store = metadata_store
+
+    # Initialize LLM client
+    app.state.llm_client = create_llm_client(settings)
+
     yield
+
+    # Shutdown
+    await db.shutdown()
 
 
 app = FastAPI(
@@ -28,6 +49,8 @@ app = FastAPI(
 
 app.add_middleware(RequestIDMiddleware)
 register_exception_handlers(app)
+app.include_router(datasets_router)
+app.include_router(query_router)
 
 
 @app.get("/health")

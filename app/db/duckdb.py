@@ -45,7 +45,7 @@ class DuckDBManager:
             result = self._conn.execute(sql)
         columns = [desc[0] for desc in result.description]
         rows = result.fetchall()
-        return [dict(zip(columns, row)) for row in rows]
+        return [dict(zip(columns, row, strict=True)) for row in rows]
 
     async def describe_table(self, file_path: str) -> list[dict]:
         """Run DESCRIBE on a CSV/file to extract column metadata."""
