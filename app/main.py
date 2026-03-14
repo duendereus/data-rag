@@ -8,6 +8,10 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+import redis.asyncio as aioredis
+
+from app.chat.conversation import RedisConversationStore
+from app.chat.router import router as chat_router
 from app.core.logging import setup_logging
 from app.core.middleware import RequestIDMiddleware, register_exception_handlers
 from app.datasets.router import router as datasets_router
@@ -37,9 +41,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Initialize LLM client
     app.state.llm_client = create_llm_client(settings)
 
+    # Initialize Redis + conversation store
+    redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+    app.state.redis = redis_client
+    app.state.conversation_store = RedisConversationStore(
+        redis_client, ttl_hours=settings.CONVERSATION_TTL_HOURS
+    )
+
     yield
 
     # Shutdown
+    await redis_client.aclose()
     await db.shutdown()
 
 
@@ -54,6 +66,7 @@ app.add_middleware(RequestIDMiddleware)
 register_exception_handlers(app)
 app.include_router(datasets_router)
 app.include_router(query_router)
+app.include_router(chat_router)
 
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))

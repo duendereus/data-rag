@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     # Query
     QUERY_RESULT_LIMIT: int = 1000
 
+    # Redis
+    REDIS_URL: str = "redis://localhost:6379"
+    CONVERSATION_TTL_HOURS: int = 24
+
     # Logging
     LOG_LEVEL: str = "INFO"
 

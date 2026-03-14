@@ -5,6 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from app.chat.conversation import ConversationMessage
 from app.db.metadata import DatasetRecord
 
 PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"

@@ -4,6 +4,7 @@ from functools import lru_cache
 
 from fastapi import Request
 
+from app.chat.conversation import ConversationStore
 from app.config import Settings
 from app.db.duckdb import DuckDBManager
 from app.db.metadata import MetadataStore
@@ -29,3 +30,8 @@ def get_metadata_store(request: Request) -> MetadataStore:
 def get_llm_client(request: Request) -> LLMClient:
     """Retrieve the LLM client from application state."""
     return request.app.state.llm_client
+
+
+def get_conversation_store(request: Request) -> ConversationStore:
+    """Retrieve the conversation store from application state."""
+    return request.app.state.conversation_store
