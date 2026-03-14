@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
-from datetime import datetime
 
 import redis.asyncio as aioredis
 import structlog

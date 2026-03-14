@@ -11,6 +11,7 @@ from app.core.exceptions import (
     DatasetNotFoundError,
     FileTooLargeError,
     LLMError,
+    NoDatasetsAvailableError,
     QueryExecutionError,
     SchemaExtractionError,
     UnsupportedFileTypeError,
@@ -20,6 +21,7 @@ logger = structlog.get_logger()
 
 EXCEPTION_STATUS_MAP: dict[type[Exception], int] = {
     DatasetNotFoundError: 404,
+    NoDatasetsAvailableError: 404,
     UnsupportedFileTypeError: 422,
     FileTooLargeError: 413,
     QueryExecutionError: 422,
@@ -46,6 +48,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     """Register global exception handlers that map custom exceptions to HTTP responses."""
 
     @app.exception_handler(DatasetNotFoundError)
+    @app.exception_handler(NoDatasetsAvailableError)
     @app.exception_handler(UnsupportedFileTypeError)
     @app.exception_handler(FileTooLargeError)
     @app.exception_handler(QueryExecutionError)

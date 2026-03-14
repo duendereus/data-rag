@@ -4,11 +4,10 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import redis.asyncio as aioredis
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-
-import redis.asyncio as aioredis
 
 from app.chat.conversation import RedisConversationStore
 from app.chat.router import router as chat_router

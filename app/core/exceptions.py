@@ -43,6 +43,13 @@ class LLMError(Exception):
         super().__init__(f"LLM error: {detail}")
 
 
+class NoDatasetsAvailableError(Exception):
+    """Raised when a chat query is made but no datasets exist."""
+
+    def __init__(self) -> None:
+        super().__init__("No datasets have been uploaded. Upload at least one dataset first.")
+
+
 class SchemaExtractionError(Exception):
     """Raised when schema extraction from a file fails."""
 

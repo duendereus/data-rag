@@ -55,6 +55,72 @@ def build_sql_prompt(dataset: DatasetRecord, question: str, row_limit: int) -> t
     return system_prompt, question
 
 
+def _format_dataset_block(dataset: DatasetRecord) -> str:
+    """Format a single dataset's info for the multi-dataset prompt."""
+    lines = [
+        f"### Dataset: \"{dataset.name}\" (file: '{dataset.file_path}')",
+        "",
+        "Schema:",
+        _format_schema(dataset.schema_json),
+        "",
+        "Sample data:",
+        _format_sample(dataset.sample_json),
+    ]
+    return "\n".join(lines)
+
+
+def build_multi_dataset_sql_prompt(
+    datasets: list[DatasetRecord],
+    question: str,
+    row_limit: int,
+) -> tuple[str, str]:
+    """Build SQL prompt with ALL dataset schemas for multi-dataset queries.
+
+    Returns (system_prompt, user_message).
+    """
+    template = _load_prompt("sql_generation_multi.md")
+    datasets_block = "\n\n".join(_format_dataset_block(ds) for ds in datasets)
+    system_prompt = template.format(
+        datasets_block=datasets_block,
+        row_limit=row_limit,
+    )
+    return system_prompt, question
+
+
+def _format_history(messages: list[ConversationMessage], max_messages: int = 20) -> str:
+    """Format conversation history for the interpretation prompt."""
+    if not messages:
+        return "(no previous conversation)"
+    recent = messages[-max_messages:]
+    lines = []
+    for msg in recent:
+        role = "User" if msg.role == "user" else "Assistant"
+        lines.append(f"{role}: {msg.content}")
+    return "\n".join(lines)
+
+
+def build_chat_interpretation_prompt(
+    question: str,
+    sql: str,
+    result: list[dict[str, Any]],
+    locale: str,
+    history: list[ConversationMessage],
+) -> tuple[str, str]:
+    """Build interpretation prompt with conversation history.
+
+    Returns (system_prompt, user_message).
+    """
+    template = _load_prompt("interpretation_chat.md")
+    system_prompt = template.format(
+        locale=locale,
+        question=question,
+        sql=sql,
+        result=_format_result(result),
+        history=_format_history(history),
+    )
+    return system_prompt, question
+
+
 def _format_result(result: list[dict[str, Any]]) -> str:
     """Format query result rows as a readable table for the LLM."""
     if not result:
