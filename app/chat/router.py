@@ -50,6 +50,23 @@ async def chat(request: ChatRequest, service: ChatServiceDep) -> ChatResponse:
     return await service.chat(request)
 
 
+@router.get("/chat/{conversation_id}")
+async def get_conversation(
+    conversation_id: str, store: ConversationStoreDep
+) -> dict:
+    """Get the message history for a conversation."""
+    conversation = await store.get(conversation_id)
+    if not conversation:
+        return {"conversation_id": conversation_id, "messages": []}
+    return {
+        "conversation_id": conversation_id,
+        "messages": [
+            {"role": m.role, "content": m.content, "timestamp": m.timestamp}
+            for m in conversation.messages
+        ],
+    }
+
+
 @router.delete("/chat/{conversation_id}", status_code=204)
 async def delete_conversation(conversation_id: str, store: ConversationStoreDep) -> None:
     """Delete a conversation's history."""
