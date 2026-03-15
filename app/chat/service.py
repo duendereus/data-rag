@@ -1,19 +1,23 @@
 """Chat service — multi-dataset queries with conversation history."""
 
+import asyncio
+import json
 import time
 import uuid
 from datetime import UTC, datetime
 from typing import Any
 
 import structlog
+from pydantic import ValidationError
 
 from app.chat.conversation import ConversationMessage, ConversationStore
-from app.chat.schemas import ChatRequest, ChatResponse
+from app.chat.schemas import ChartConfig, ChatRequest, ChatResponse
 from app.core.exceptions import NoDatasetsAvailableError, QueryExecutionError
 from app.datasets.repository import DatasetRepository
 from app.db.duckdb import DuckDBManager
 from app.llm.base import LLMClient
 from app.query.prompt_builder import (
+    build_chart_prompt,
     build_chat_interpretation_prompt,
     build_multi_dataset_sql_prompt,
 )
@@ -71,7 +75,7 @@ class ChatService:
             raise QueryExecutionError(sql=sql, detail=str(e)) from e
         execution_time_ms = int((time.monotonic() - start) * 1000)
 
-        # Step 3: Interpret with conversation history
+        # Step 3: Interpret + generate chart IN PARALLEL
         interp_system, interp_user = build_chat_interpretation_prompt(
             question=request.question,
             sql=sql,
@@ -79,7 +83,18 @@ class ChatService:
             locale=request.locale,
             history=history,
         )
-        answer = await self._llm.complete(interp_system, interp_user)
+        chart_system, chart_user = build_chart_prompt(
+            question=request.question,
+            sql=sql,
+            result=result,
+        )
+
+        answer, chart_raw = await asyncio.gather(
+            self._llm.complete(interp_system, interp_user),
+            self._llm.complete(chart_system, chart_user),
+        )
+
+        chart_config = self._parse_chart(chart_raw)
 
         # Step 4: Save to conversation history
         now = datetime.now(UTC).isoformat()
@@ -99,4 +114,18 @@ class ChatService:
             result=result if request.include_sql else None,
             execution_time_ms=execution_time_ms,
             conversation_id=conversation_id,
+            chart=chart_config,
         )
+
+    @staticmethod
+    def _parse_chart(raw: str) -> ChartConfig | None:
+        """Parse LLM chart output. Returns None if NO_CHART or invalid JSON."""
+        cleaned = _clean_sql(raw)
+        if "NO_CHART" in cleaned.upper():
+            return None
+        try:
+            data = json.loads(cleaned)
+            return ChartConfig(**data)
+        except (json.JSONDecodeError, ValidationError):
+            logger.warning("chart_parse_failed", raw=cleaned[:200])
+            return None

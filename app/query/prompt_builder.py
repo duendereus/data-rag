@@ -153,3 +153,21 @@ def build_interpretation_prompt(
         result=_format_result(result),
     )
     return system_prompt, question
+
+
+def build_chart_prompt(
+    question: str,
+    sql: str,
+    result: list[dict[str, Any]],
+) -> tuple[str, str]:
+    """Build prompt for chart generation.
+
+    Returns (system_prompt, user_message).
+    """
+    template = _load_prompt("chart_generation.md")
+    system_prompt = template.format(
+        question=question,
+        sql=sql,
+        result=_format_result(result),
+    )
+    return system_prompt, question

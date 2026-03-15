@@ -1,6 +1,7 @@
 """Tests for the chat service and multi-dataset query pipeline."""
 
 import io
+import json
 import re
 from pathlib import Path
 
@@ -25,8 +26,18 @@ from tests.conftest import MockConversationStore, MockLLMClient
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 
+def _is_chart_prompt(system: str) -> bool:
+    """Check if a system prompt is for chart generation."""
+    return "chart specification" in system.lower() or "NO_CHART" in system
+
+
+def _extract_file_paths(system: str) -> list[str]:
+    """Extract all file paths from the multi-dataset prompt."""
+    return re.findall(r"file: '([^']+)'", system)
+
+
 def _extract_file_path(system: str) -> str:
-    """Extract a file path from the multi-dataset prompt."""
+    """Extract the first file path from the multi-dataset prompt."""
     match = re.search(r"file: '([^']+)'", system)
     return match.group(1) if match else "unknown"
 
@@ -101,12 +112,10 @@ class TestChatService:
         db, repo = multi_dataset_env
         conv_store = MockConversationStore()
 
-        call_count = 0
-
         def mock_response(system: str, user: str) -> str:
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
+            if _is_chart_prompt(system):
+                return "NO_CHART"
+            if "Available datasets" in system:
                 file_path = _extract_file_path(system)
                 return f"SELECT COUNT(*) AS total FROM '{file_path}'"
             return "There are 20 rows."
@@ -130,15 +139,17 @@ class TestChatService:
         db, repo = multi_dataset_env
         conv_store = MockConversationStore()
 
-        call_count = 0
+        answer_count = 0
 
         def mock_response(system: str, user: str) -> str:
-            nonlocal call_count
-            call_count += 1
-            if call_count % 2 == 1:
+            nonlocal answer_count
+            if _is_chart_prompt(system):
+                return "NO_CHART"
+            if "Available datasets" in system:
                 file_path = _extract_file_path(system)
                 return f"SELECT COUNT(*) AS total FROM '{file_path}'"
-            return f"Answer {call_count // 2}"
+            answer_count += 1
+            return f"Answer {answer_count}"
 
         mock_llm = MockLLMClient(response=mock_response)
         service = ChatService(
@@ -185,13 +196,13 @@ class TestChatService:
         db, repo = multi_dataset_env
         conv_store = MockConversationStore()
 
-        call_count = 0
         interpretation_system = None
 
         def mock_response(system: str, user: str) -> str:
-            nonlocal call_count, interpretation_system
-            call_count += 1
-            if call_count % 2 == 1:
+            nonlocal interpretation_system
+            if _is_chart_prompt(system):
+                return "NO_CHART"
+            if "Available datasets" in system:
                 file_path = _extract_file_path(system)
                 return f"SELECT 1 AS x FROM '{file_path}'"
             interpretation_system = system
@@ -208,7 +219,6 @@ class TestChatService:
         r1 = await service.chat(ChatRequest(question="First question"))
 
         # Second call — interpretation should include history
-        call_count = 0
         interpretation_system = None
         await service.chat(
             ChatRequest(question="Second question", conversation_id=r1.conversation_id)
@@ -228,12 +238,10 @@ class TestChatEndpoint:
         store = MetadataStore(db)
         await store.create_table()
 
-        call_count = 0
-
         def mock_response(system: str, user: str) -> str:
-            nonlocal call_count
-            call_count += 1
-            if call_count % 2 == 1:
+            if _is_chart_prompt(system):
+                return "NO_CHART"
+            if "Available datasets" in system:
                 file_path = _extract_file_path(system)
                 return f"SELECT COUNT(*) AS total FROM '{file_path}'"
             return "There are 20 rows total."
@@ -283,3 +291,95 @@ class TestChatEndpoint:
             json={"question": "Second", "conversation_id": conv_id},
         )
         assert r2.json()["conversation_id"] == conv_id
+
+
+class TestChartGeneration:
+    async def test_chart_bar(self, multi_dataset_env):
+        db, repo = multi_dataset_env
+        conv_store = MockConversationStore()
+
+        chart_json = json.dumps(
+            {
+                "type": "bar",
+                "title": "Sales by branch",
+                "labels": ["CDMX", "GDL", "MTY"],
+                "datasets": [{"label": "Total", "data": [7046, 6897, 5598]}],
+            }
+        )
+
+        def mock_response(system: str, user: str) -> str:
+            if _is_chart_prompt(system):
+                return chart_json
+            if "Available datasets" in system:
+                # Use the schema info in the prompt to find the sales dataset
+                # The prompt lists datasets with their file paths and schemas
+                paths = _extract_file_paths(system)
+                # Find path whose schema section contains "sucursal"
+                for p in paths:
+                    idx = system.find(p)
+                    # Check the text around this path for "sucursal"
+                    section = system[idx : idx + 500] if idx >= 0 else ""
+                    if "sucursal" in section:
+                        return f"SELECT sucursal, SUM(ventas) AS total FROM '{p}' GROUP BY sucursal"
+                # Fallback
+                return f"SELECT COUNT(*) AS total FROM '{paths[0]}'"
+            return "CDMX had the most sales."
+
+        service = ChatService(
+            db=db,
+            repository=repo,
+            llm_client=MockLLMClient(response=mock_response),
+            conversation_store=conv_store,
+        )
+
+        response = await service.chat(ChatRequest(question="Sales by branch"))
+        assert response.chart is not None
+        assert response.chart.type == "bar"
+        assert response.chart.title == "Sales by branch"
+        assert len(response.chart.labels) == 3
+        assert response.chart.datasets[0].data == [7046, 6897, 5598]
+
+    async def test_chart_no_chart(self, multi_dataset_env):
+        db, repo = multi_dataset_env
+        conv_store = MockConversationStore()
+
+        def mock_response(system: str, user: str) -> str:
+            if _is_chart_prompt(system):
+                return "NO_CHART"
+            if "Available datasets" in system:
+                file_path = _extract_file_path(system)
+                return f"SELECT COUNT(*) AS total FROM '{file_path}'"
+            return "20 rows."
+
+        service = ChatService(
+            db=db,
+            repository=repo,
+            llm_client=MockLLMClient(response=mock_response),
+            conversation_store=conv_store,
+        )
+
+        response = await service.chat(ChatRequest(question="How many rows?"))
+        assert response.chart is None
+
+    async def test_chart_invalid_json_graceful(self, multi_dataset_env):
+        db, repo = multi_dataset_env
+        conv_store = MockConversationStore()
+
+        def mock_response(system: str, user: str) -> str:
+            if _is_chart_prompt(system):
+                return "this is not valid json at all {{{{"
+            if "Available datasets" in system:
+                file_path = _extract_file_path(system)
+                return f"SELECT COUNT(*) AS total FROM '{file_path}'"
+            return "20 rows."
+
+        service = ChatService(
+            db=db,
+            repository=repo,
+            llm_client=MockLLMClient(response=mock_response),
+            conversation_store=conv_store,
+        )
+
+        response = await service.chat(ChatRequest(question="test"))
+        assert response.chart is None
+        assert response.answer == "20 rows."

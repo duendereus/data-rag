@@ -51,9 +51,7 @@ async def chat(request: ChatRequest, service: ChatServiceDep) -> ChatResponse:
 
 
 @router.get("/chat/{conversation_id}")
-async def get_conversation(
-    conversation_id: str, store: ConversationStoreDep
-) -> dict:
+async def get_conversation(conversation_id: str, store: ConversationStoreDep) -> dict:
     """Get the message history for a conversation."""
     conversation = await store.get(conversation_id)
     if not conversation:
